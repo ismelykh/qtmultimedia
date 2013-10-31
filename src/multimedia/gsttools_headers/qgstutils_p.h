@@ -70,7 +70,11 @@ namespace QGstUtils {
     QSize capsResolution(const GstCaps *caps);
     QSize capsCorrectedResolution(const GstCaps *caps);
     QAudioFormat audioFormatForCaps(const GstCaps *caps);
+#if GST_CHECK_VERSION(1,0,0)
+    QAudioFormat audioFormatForSample(GstSample *sample);
+#else
     QAudioFormat audioFormatForBuffer(GstBuffer *buffer);
+#endif
     GstCaps *capsForAudioFormat(QAudioFormat format);
     void initializeGst();
     QMultimedia::SupportEstimate hasSupport(const QString &mimeType,

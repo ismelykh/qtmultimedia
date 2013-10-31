@@ -127,11 +127,19 @@ public:
 
     void addProbe(QGstreamerVideoProbeControl* probe);
     void removeProbe(QGstreamerVideoProbeControl* probe);
+#if GST_CHECK_VERSION(1,0,0)
+    static GstPadProbeReturn padVideoBufferProbe(GstPad *pad, GstPadProbeInfo *info, gpointer user_data);
+#else
     static gboolean padVideoBufferProbe(GstPad *pad, GstBuffer *buffer, gpointer user_data);
+#endif
 
     void addProbe(QGstreamerAudioProbeControl* probe);
     void removeProbe(QGstreamerAudioProbeControl* probe);
+#if GST_CHECK_VERSION(1,0,0)
+    static GstPadProbeReturn padAudioBufferProbe(GstPad *pad, GstPadProbeInfo* info, gpointer user_data);
+#else
     static gboolean padAudioBufferProbe(GstPad *pad, GstBuffer *buffer, gpointer user_data);
+#endif
 
     void endOfMediaReset();
 
@@ -260,6 +268,7 @@ private:
     bool m_isLiveSource;
 
     bool m_isPlaylist;
+    gulong pad_probe_id;
 };
 
 QT_END_NAMESPACE

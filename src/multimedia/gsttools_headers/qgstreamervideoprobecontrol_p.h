@@ -56,7 +56,11 @@ public:
     explicit QGstreamerVideoProbeControl(QObject *parent);
     virtual ~QGstreamerVideoProbeControl();
 
+#if GST_CHECK_VERSION(1,0,0)
+    void bufferProbed(GstBuffer* buffer, GstCaps*);
+#else
     void bufferProbed(GstBuffer* buffer);
+#endif
     void startFlushing();
     void stopFlushing();
 

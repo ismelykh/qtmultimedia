@@ -59,7 +59,11 @@
 #include <private/qgstreamervideorenderer_p.h>
 
 #if defined(Q_WS_MAEMO_6) && defined(__arm__)
-#include "qgstreamergltexturerenderer.h"
+#include "private/qgstreamergltexturerenderer.h"
+#endif
+
+#if defined(HAVE_MIR) && defined (__arm__)
+#include "private/qgstreamermirtexturerenderer_p.h"
 #endif
 
 #include "qgstreamerstreamscontrol.h"
@@ -90,6 +94,9 @@ QGstreamerPlayerService::QGstreamerPlayerService(QObject *parent):
 
 #if defined(Q_WS_MAEMO_6) && defined(__arm__)
     m_videoRenderer = new QGstreamerGLTextureRenderer(this);
+#elif defined(HAVE_MIR) && defined (__arm__)
+    //m_videoRenderer = new QGstreamerVideoRenderer(this);
+    m_videoRenderer = new QGstreamerMirTextureRenderer(this, m_session);
 #else
     m_videoRenderer = new QGstreamerVideoRenderer(this);
 #endif

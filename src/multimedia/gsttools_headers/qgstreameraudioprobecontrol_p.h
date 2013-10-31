@@ -55,8 +55,11 @@ class QGstreamerAudioProbeControl : public QMediaAudioProbeControl
 public:
     explicit QGstreamerAudioProbeControl(QObject *parent);
     virtual ~QGstreamerAudioProbeControl();
-
+#if GST_CHECK_VERSION(1,0,0)
+    void bufferProbed(GstBuffer* buffer, GstCaps* caps);
+#else
     void bufferProbed(GstBuffer* buffer);
+#endif
 
 private slots:
     void bufferProbed();

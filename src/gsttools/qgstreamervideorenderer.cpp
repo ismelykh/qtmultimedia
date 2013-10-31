@@ -43,8 +43,7 @@
 #include <private/qvideosurfacegstsink_p.h>
 #include <private/qgstutils_p.h>
 #include <qabstractvideosurface.h>
-
-#include <QDebug>
+#include <QtCore/qdebug.h>
 
 #include <gst/gst.h>
 
@@ -63,7 +62,11 @@ GstElement *QGstreamerVideoRenderer::videoSink()
 {
     if (!m_videoSink && m_surface) {
         m_videoSink = QVideoSurfaceGstSink::createSink(m_surface);
-        qt_gst_object_ref_sink(GST_OBJECT(m_videoSink)); //Take ownership
+#if GST_CHECK_VERSION(1,0,0)
+        gst_object_ref_sink(GST_OBJECT(m_videoSink));
+#else
+        gst_object_sink(GST_OBJECT(m_videoSink));
+#endif
     }
 
     return reinterpret_cast<GstElement*>(m_videoSink);

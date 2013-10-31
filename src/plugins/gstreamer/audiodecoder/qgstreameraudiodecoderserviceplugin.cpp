@@ -82,29 +82,42 @@ void QGstreamerAudioDecoderServicePlugin::updateSupportedMimeTypes() const
     gst_init(NULL, NULL);
 
     GList *plugins, *orig_plugins;
+#if GST_CHECK_VERSION(1,0,0)
+    orig_plugins = plugins = gst_registry_get_plugin_list (gst_registry_get());
+#else
     orig_plugins = plugins = gst_default_registry_get_plugin_list ();
-
+#endif
     while (plugins) {
         GList *features, *orig_features;
 
         GstPlugin *plugin = (GstPlugin *) (plugins->data);
         plugins = g_list_next (plugins);
 
+#if GST_CHECK_VERSION(1,0,0)
+        if (GST_OBJECT_FLAG_IS_SET(plugin, GST_PLUGIN_FLAG_BLACKLISTED))
+            continue;
+#else
         if (plugin->flags & (1<<1)) //GST_PLUGIN_FLAG_BLACKLISTED
             continue;
-
-        orig_features = features = gst_registry_get_feature_list_by_plugin(gst_registry_get_default (),
-                                                                        plugin->desc.name);
+#endif
+        orig_features = features = gst_registry_get_feature_list_by_plugin(gst_registry_get (),
+                                                                         gst_plugin_get_name(plugin));
         while (features) {
             if (!G_UNLIKELY(features->data == NULL)) {
                 GstPluginFeature *feature = GST_PLUGIN_FEATURE(features->data);
                 if (GST_IS_ELEMENT_FACTORY (feature)) {
                     GstElementFactory *factory = GST_ELEMENT_FACTORY(gst_plugin_feature_load(feature));
                     if (factory
-                       && factory->numpadtemplates > 0
+                       && gst_element_factory_get_num_pad_templates(factory) > 0
+#if GST_CHECK_VERSION(1,0,0)
+                       && (qstrcmp(gst_element_factory_get_metadata(factory, GST_ELEMENT_METADATA_KLASS), "Codec/Decoder/Audio") == 0
+                          || qstrcmp(gst_element_factory_get_metadata(factory, GST_ELEMENT_METADATA_KLASS), "Codec/Demux") == 0 )
+#else
                        && (qstrcmp(factory->details.klass, "Codec/Decoder/Audio") == 0
-                          || qstrcmp(factory->details.klass, "Codec/Demux") == 0 )) {
-                        const GList *pads = factory->staticpadtemplates;
+                           || qstrcmp(factory->details.klass, "Codec/Demux") == 0 )
+#endif
+                        ) {
+                        const GList *pads = gst_element_factory_get_static_pad_templates(factory);
                         while (pads) {
                             GstStaticPadTemplate *padtemplate = (GstStaticPadTemplate*)(pads->data);
                             pads = g_list_next (pads);

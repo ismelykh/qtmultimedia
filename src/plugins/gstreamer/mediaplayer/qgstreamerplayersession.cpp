@@ -93,6 +93,16 @@ typedef enum {
     GST_PLAY_FLAG_BUFFERING     = 0x000000100
 } GstPlayFlags;
 
+#if GST_CHECK_VERSION(1,0,0)
+#define DEFAULT_RAW_CAPS \
+    "video/x-surface; " \
+    "text/plain; " \
+    "text/x-pango-markup; " \
+    "video/x-dvd-subpicture; " \
+    "subpicture/x-pgs" \
+    "video/x-raw" \
+    "audio/x-raw"
+#else
 #define DEFAULT_RAW_CAPS \
     "video/x-raw-yuv; " \
     "video/x-raw-rgb; " \
@@ -105,6 +115,8 @@ typedef enum {
     "text/x-pango-markup; " \
     "video/x-dvd-subpicture; " \
     "subpicture/x-pgs"
+#endif
+
 static GstStaticCaps static_RawCaps = GST_STATIC_CAPS(DEFAULT_RAW_CAPS);
 
 QGstreamerPlayerSession::QGstreamerPlayerSession(QObject *parent)
@@ -145,8 +157,11 @@ QGstreamerPlayerSession::QGstreamerPlayerSession(QObject *parent)
     gboolean result = gst_type_find_register(0, "playlist", GST_RANK_MARGINAL, playlistTypeFindFunction, 0, 0, this, 0);
     Q_ASSERT(result == TRUE);
     Q_UNUSED(result);
-
+#if GST_CHECK_VERSION(1,0,0)
+    m_playbin = gst_element_factory_make("playbin", NULL);
+#else
     m_playbin = gst_element_factory_make("playbin2", NULL);
+#endif
 
     if (m_playbin) {
         //GST_PLAY_FLAG_NATIVE_VIDEO omits configuration of ffmpegcolorspace and videoscale,
@@ -195,9 +210,11 @@ QGstreamerPlayerSession::QGstreamerPlayerSession(QObject *parent)
 
     m_videoIdentity = GST_ELEMENT(g_object_new(gst_video_connector_get_type(), 0)); // floating ref
     g_signal_connect(G_OBJECT(m_videoIdentity), "connection-failed", G_CALLBACK(insertColorSpaceElement), (gpointer)this);
-
+#if GST_CHECK_VERSION(1,0,0)
+    m_colorSpace = gst_element_factory_make("videoconvert", "ffmpegcolorspace-vo");
+#else
     m_colorSpace = gst_element_factory_make("ffmpegcolorspace", "ffmpegcolorspace-vo");
-    // might not get a parent, take ownership to avoid leak
+#endif
     qt_gst_object_ref_sink(GST_OBJECT(m_colorSpace));
 
     m_nullVideoSink = gst_element_factory_make("fakesink", NULL);
@@ -214,7 +231,7 @@ QGstreamerPlayerSession::QGstreamerPlayerSession(QObject *parent)
 
     // add ghostpads
     GstPad *pad = gst_element_get_static_pad(m_videoIdentity,"sink");
-    gst_element_add_pad(GST_ELEMENT(m_videoOutputBin), gst_ghost_pad_new("videosink", pad));
+    gst_element_add_pad(GST_ELEMENT(m_videoOutputBin), gst_ghost_pad_new("sink", pad));
     gst_object_unref(GST_OBJECT(pad));
 
     if (m_playbin != 0) {
@@ -226,7 +243,7 @@ QGstreamerPlayerSession::QGstreamerPlayerSession(QObject *parent)
         g_object_set(G_OBJECT(m_playbin), "video-sink", m_videoOutputBin, NULL);
 
         g_signal_connect(G_OBJECT(m_playbin), "notify::source", G_CALLBACK(playbinNotifySource), this);
-        g_signal_connect(G_OBJECT(m_playbin), "element-added",  G_CALLBACK(handleElementAdded), this);
+        //g_signal_connect(G_OBJECT(m_playbin), "element-added",  G_CALLBACK(handleElementAdded), this);
 
         if (usePlaybinVolume()) {
             updateVolume();
@@ -350,9 +367,13 @@ qint64 QGstreamerPlayerSession::position() const
     GstFormat   format = GST_FORMAT_TIME;
     gint64      position = 0;
 
+#if GST_CHECK_VERSION(1,0,0)
+    if ( m_playbin && gst_element_query_position(m_playbin, format, &position))
+        m_lastPosition = position / 1000000;
+#else
     if ( m_playbin && gst_element_query_position(m_playbin, &format, &position))
         m_lastPosition = position / 1000000;
-
+#endif
     return m_lastPosition;
 }
 
@@ -482,9 +503,18 @@ bool QGstreamerPlayerSession::isAudioAvailable() const
     return m_audioAvailable;
 }
 
+#if GST_CHECK_VERSION(1,0,0)
+static GstPadProbeReturn block_pad_cb(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)
+#else
 static void block_pad_cb(GstPad *pad, gboolean blocked, gpointer user_data)
+#endif
 {
     Q_UNUSED(pad);
+#if GST_CHECK_VERSION(1,0,0)
+    Q_UNUSED(info);
+    Q_UNUSED(user_data);
+    return GST_PAD_PROBE_OK;
+#else
 #ifdef DEBUG_PLAYBIN
     qDebug() << "block_pad_cb, blocked:" << blocked;
 #endif
@@ -493,6 +523,7 @@ static void block_pad_cb(GstPad *pad, gboolean blocked, gpointer user_data)
         QGstreamerPlayerSession *session = reinterpret_cast<QGstreamerPlayerSession*>(user_data);
         QMetaObject::invokeMethod(session, "finishVideoOutputChange", Qt::QueuedConnection);
     }
+#endif
 }
 
 void QGstreamerPlayerSession::updateVideoRenderer()
@@ -537,7 +568,7 @@ void QGstreamerPlayerSession::setVideoRenderer(QObject *videoOutput)
     m_renderer = renderer;
 
 #ifdef DEBUG_VO_BIN_DUMP
-    _gst_debug_bin_to_dot_file_with_ts(GST_BIN(m_playbin),
+    gst_debug_bin_to_dot_file_with_ts(GST_BIN(m_playbin),
                                   GstDebugGraphDetails(GST_DEBUG_GRAPH_SHOW_ALL /* GST_DEBUG_GRAPH_SHOW_MEDIA_TYPE | GST_DEBUG_GRAPH_SHOW_NON_DEFAULT_PARAMS | GST_DEBUG_GRAPH_SHOW_STATES*/),
                                   "playbin_set");
 #endif
@@ -641,7 +672,11 @@ void QGstreamerPlayerSession::setVideoRenderer(QObject *videoOutput)
 
         //block pads, async to avoid locking in paused state
         GstPad *srcPad = gst_element_get_static_pad(m_videoIdentity, "src");
+#if GST_CHECK_VERSION(1,0,0)
+        this->pad_probe_id = gst_pad_add_probe(srcPad, (GstPadProbeType)(GST_PAD_PROBE_TYPE_BUFFER | GST_PAD_PROBE_TYPE_BLOCK), block_pad_cb, this, NULL);
+#else
         gst_pad_set_blocked_async(srcPad, true, &block_pad_cb, this);
+#endif
         gst_object_unref(GST_OBJECT(srcPad));
 
         //Unpause the sink to avoid waiting until the buffer is processed
@@ -682,7 +717,11 @@ void QGstreamerPlayerSession::finishVideoOutputChange()
         //video output was change back to the current one,
         //no need to torment the pipeline, just unblock the pad
         if (gst_pad_is_blocked(srcPad))
+#if GST_CHECK_VERSION(1,0,0)
+            gst_pad_remove_probe(srcPad, this->pad_probe_id);
+#else
             gst_pad_set_blocked_async(srcPad, false, &block_pad_cb, 0);
+#endif
 
         m_pendingVideoSink = 0;
         gst_object_unref(GST_OBJECT(srcPad));
@@ -768,12 +807,17 @@ void QGstreamerPlayerSession::finishVideoOutputChange()
 
     //don't have to wait here, it will unblock eventually
     if (gst_pad_is_blocked(srcPad))
-        gst_pad_set_blocked_async(srcPad, false, &block_pad_cb, 0);
+#if GST_CHECK_VERSION(1,0,0)
+            gst_pad_remove_probe(srcPad, this->pad_probe_id);
+#else
+            gst_pad_set_blocked_async(srcPad, false, &block_pad_cb, 0);
+#endif
+
     gst_object_unref(GST_OBJECT(srcPad));
 
 #ifdef DEBUG_VO_BIN_DUMP
-    _gst_debug_bin_to_dot_file_with_ts(GST_BIN(m_playbin),
-                                  GstDebugGraphDetails(GST_DEBUG_GRAPH_SHOW_ALL /* GST_DEBUG_GRAPH_SHOW_MEDIA_TYPE | GST_DEBUG_GRAPH_SHOW_NON_DEFAULT_PARAMS | GST_DEBUG_GRAPH_SHOW_STATES*/),
+    gst_debug_bin_to_dot_file_with_ts(GST_BIN(m_playbin),
+                                  GstDebugGraphDetails(GST_DEBUG_GRAPH_SHOW_ALL /* | GST_DEBUG_GRAPH_SHOW_MEDIA_TYPE | GST_DEBUG_GRAPH_SHOW_NON_DEFAULT_PARAMS | GST_DEBUG_GRAPH_SHOW_STATES */),
                                   "playbin_finish");
 #endif
 }
@@ -838,6 +882,7 @@ bool QGstreamerPlayerSession::play()
 #ifdef DEBUG_PLAYBIN
     qDebug() << Q_FUNC_INFO;
 #endif
+
     m_everPlayed = false;
     if (m_playbin) {
         m_pendingState = QMediaPlayer::PlayingState;
@@ -1335,8 +1380,11 @@ void QGstreamerPlayerSession::getStreamsInfo()
         default:
             break;
         }
-
+#if GST_CHECK_VERSION(1,0,0)
+        if (tags && GST_IS_TAG_LIST(tags)) {
+#else
         if (tags && gst_is_tag_list(tags)) {
+#endif
             gchar *languageCode = 0;
             if (gst_tag_list_get_string(tags, GST_TAG_LANGUAGE_CODE, &languageCode))
                 streamProperties[QMediaMetaData::Language] = QString::fromUtf8(languageCode);
@@ -1375,7 +1423,11 @@ void QGstreamerPlayerSession::updateVideoResolutionTag()
     QSize aspectRatio;
 
     GstPad *pad = gst_element_get_static_pad(m_videoIdentity, "src");
+#if GST_CHECK_VERSION(1,0,0)
+    GstCaps *caps = gst_pad_get_current_caps(pad);
+#else
     GstCaps *caps = gst_pad_get_negotiated_caps(pad);
+#endif
 
     if (caps) {
         const GstStructure *structure = gst_caps_get_structure(caps, 0);
@@ -1419,7 +1471,11 @@ void QGstreamerPlayerSession::updateDuration()
     gint64 gstDuration = 0;
     int duration = -1;
 
+#if GST_CHECK_VERSION(1,0,0)
+    if (m_playbin && gst_element_query_duration(m_playbin, format, &gstDuration))
+#else
     if (m_playbin && gst_element_query_duration(m_playbin, &format, &gstDuration))
+#endif
         duration = gstDuration / 1000000;
 
     if (m_duration != duration) {
@@ -1475,7 +1531,11 @@ void QGstreamerPlayerSession::playbinNotifySource(GObject *o, GParamSpec *p, gpo
 
     // The rest
     if (g_object_class_find_property(G_OBJECT_GET_CLASS(source), "extra-headers") != 0) {
+#if GST_CHECK_VERSION(1,0,0)
+        GstStructure *extras = gst_structure_new_empty("extras");
+#else
         GstStructure *extras = gst_structure_empty_new("extras");
+#endif
 
         foreach (const QByteArray &rawHeader, self->m_request.rawHeaderList()) {
             if (rawHeader == userAgentString) // Filter User-Agent
@@ -1629,7 +1689,11 @@ GstAutoplugSelectResult QGstreamerPlayerSession::handleAutoplugSelect(GstBin *bi
     const gchar *factoryName = gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory));
     if (g_str_has_prefix(factoryName, "vaapi")) {
         GstPad *sinkPad = gst_element_get_static_pad(session->m_videoSink, "sink");
+#if GST_CHECK_VERSION(1,0,0)
+        GstCaps *sinkCaps = gst_pad_query_caps(sinkPad, NULL);
+#else
         GstCaps *sinkCaps = gst_pad_get_caps(sinkPad);
+#endif
 
 #if (GST_VERSION_MAJOR == 0) && ((GST_VERSION_MINOR < 10) || (GST_VERSION_MICRO < 33))
         if (!factory_can_src_any_caps(factory, sinkCaps))
@@ -1658,14 +1722,19 @@ void QGstreamerPlayerSession::handleElementAdded(GstBin *bin, GstElement *elemen
         // Disable on-disk buffering.
         g_object_set(G_OBJECT(element), "temp-template", NULL, NULL);
     } else if (g_str_has_prefix(elementName, "uridecodebin") ||
-               g_str_has_prefix(elementName, "decodebin2")) {
-
+#if GST_CHECK_VERSION(1,0,0)
+        g_str_has_prefix(elementName, "decodebin")) {
+#else
+        g_str_has_prefix(elementName, "decodebin2")) {
+#endif
         if (g_str_has_prefix(elementName, "uridecodebin")) {
             // Add video/x-surface (VAAPI) to default raw formats
             g_object_set(G_OBJECT(element), "caps", gst_static_caps_get(&static_RawCaps), NULL);
             // listen for uridecodebin autoplug-select to skip VAAPI usage when the current
             // video sink doesn't support it
+#if !(GST_CHECK_VERSION(1,0,0))
             g_signal_connect(element, "autoplug-select", G_CALLBACK(handleAutoplugSelect), session);
+#endif
         }
 
         //listen for queue2 element added to uridecodebin/decodebin2 as well.
@@ -1733,7 +1802,27 @@ void QGstreamerPlayerSession::removeProbe(QGstreamerVideoProbeControl* probe)
     // Assume user releases any outstanding references to video frames.
 }
 
-gboolean QGstreamerPlayerSession::padVideoBufferProbe(GstPad *pad, GstBuffer *buffer, gpointer user_data)
+#if GST_CHECK_VERSION(1,0,0)
+GstPadProbeReturn QGstreamerPlayerSession::padVideoBufferProbe(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)
+{
+    Q_UNUSED(pad);
+    GstBuffer* buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+
+    QGstreamerPlayerSession *session = reinterpret_cast<QGstreamerPlayerSession*>(user_data);
+    QMutexLocker locker(&session->m_videoProbeMutex);
+
+    if (session->m_videoProbes.isEmpty())
+        return GST_PAD_PROBE_OK;
+
+    foreach (QGstreamerVideoProbeControl* probe, session->m_videoProbes)
+        probe->bufferProbed(buffer, gst_pad_get_current_caps(pad));
+
+    return GST_PAD_PROBE_OK;
+}
+
+#else
+
+static gboolean QGstreamerPlayerSession::padVideoBufferProbe(GstPad *pad, GstBuffer *buffer, gpointer user_data)
 {
     Q_UNUSED(pad);
 
@@ -1748,6 +1837,7 @@ gboolean QGstreamerPlayerSession::padVideoBufferProbe(GstPad *pad, GstBuffer *bu
 
     return TRUE;
 }
+#endif
 
 void QGstreamerPlayerSession::addProbe(QGstreamerAudioProbeControl* probe)
 {
@@ -1765,6 +1855,24 @@ void QGstreamerPlayerSession::removeProbe(QGstreamerAudioProbeControl* probe)
     m_audioProbes.removeOne(probe);
 }
 
+#if GST_CHECK_VERSION(1,0,0)
+GstPadProbeReturn  QGstreamerPlayerSession::padAudioBufferProbe(GstPad *pad, GstPadProbeInfo* info, gpointer user_data)
+{
+    Q_UNUSED(pad);
+    GstBuffer* buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+
+    QGstreamerPlayerSession *session = reinterpret_cast<QGstreamerPlayerSession*>(user_data);
+    QMutexLocker locker(&session->m_audioProbeMutex);
+
+    if (session->m_audioProbes.isEmpty())
+        return GST_PAD_PROBE_OK;
+
+    foreach (QGstreamerAudioProbeControl* probe, session->m_audioProbes)
+        probe->bufferProbed(buffer, gst_pad_get_current_caps(pad));
+
+    return GST_PAD_PROBE_OK;
+}
+#else
 gboolean QGstreamerPlayerSession::padAudioBufferProbe(GstPad *pad, GstBuffer *buffer, gpointer user_data)
 {
     Q_UNUSED(pad);
@@ -1780,7 +1888,7 @@ gboolean QGstreamerPlayerSession::padAudioBufferProbe(GstPad *pad, GstBuffer *bu
 
     return TRUE;
 }
-
+#endif
 // This function is similar to stop(),
 // but does not set m_everPlayed, m_lastPosition,
 // and setSeekable() values.
@@ -1813,7 +1921,11 @@ void QGstreamerPlayerSession::removeVideoBufferProbe()
 
     GstPad *pad = gst_element_get_static_pad(m_videoSink, "sink");
     if (pad) {
+#if GST_CHECK_VERSION(1,0,0)
+        gst_pad_remove_probe(pad, m_videoBufferProbeId);
+#else
         gst_pad_remove_buffer_probe(pad, m_videoBufferProbeId);
+#endif
         gst_object_unref(GST_OBJECT(pad));
     }
 
@@ -1828,7 +1940,11 @@ void QGstreamerPlayerSession::addVideoBufferProbe()
 
     GstPad *pad = gst_element_get_static_pad(m_videoSink, "sink");
     if (pad) {
+#if GST_CHECK_VERSION(1,0,0)
+        m_videoBufferProbeId = gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER, padVideoBufferProbe, this, NULL);
+#else
         m_videoBufferProbeId = gst_pad_add_buffer_probe(pad, G_CALLBACK(padVideoBufferProbe), this);
+#endif
         gst_object_unref(GST_OBJECT(pad));
     }
 }
@@ -1845,7 +1961,11 @@ void QGstreamerPlayerSession::removeAudioBufferProbe()
 
     GstPad *pad = gst_element_get_static_pad(m_audioSink, "sink");
     if (pad) {
+#if GST_CHECK_VERSION(1,0,0)
+        gst_pad_remove_probe(pad, m_audioBufferProbeId);
+#else
         gst_pad_remove_buffer_probe(pad, m_audioBufferProbeId);
+#endif
         gst_object_unref(GST_OBJECT(pad));
     }
 
@@ -1860,7 +1980,11 @@ void QGstreamerPlayerSession::addAudioBufferProbe()
 
     GstPad *pad = gst_element_get_static_pad(m_audioSink, "sink");
     if (pad) {
+#if GST_CHECK_VERSION(1,0,0)
+        m_audioBufferProbeId = gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER, padAudioBufferProbe, this, NULL);
+#else
         m_audioBufferProbeId = gst_pad_add_buffer_probe(pad, G_CALLBACK(padAudioBufferProbe), this);
+#endif
         gst_object_unref(GST_OBJECT(pad));
     }
 }
@@ -1893,7 +2017,7 @@ void QGstreamerPlayerSession::playlistTypeFindFunction(GstTypeFind *find, gpoint
         length = qMin(length, guint64(1024));
 
     while (length > 0) {
-        guint8 *data = gst_type_find_peek(find, 0, length);
+        const guint8 *data = gst_type_find_peek(find, 0, length);
         if (data) {
             session->m_isPlaylist = (QPlaylistFileParser::findPlaylistType(QString::fromUtf8(uri), 0, data, length) != QPlaylistFileParser::UNKNOWN);
             return;

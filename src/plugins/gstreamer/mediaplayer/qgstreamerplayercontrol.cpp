@@ -527,6 +527,8 @@ void QGstreamerPlayerControl::processEOS()
         m_session->showPrerollFrames(false); // stop showing prerolled frames in stop state
     }
 
+    qWarning() << "Processing EOS!";
+
     popAndNotifyState();
 }
 

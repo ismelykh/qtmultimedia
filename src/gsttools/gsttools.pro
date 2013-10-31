@@ -2,7 +2,7 @@ TEMPLATE = lib
 
 TARGET = qgsttools_p
 QPRO_PWD = $$PWD
-QT = core-private multimedia-private gui-private
+QT = core multimedia-private gui-private
 
 !static:DEFINES += QT_MAKEDLL
 DEFINES += GLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_26
@@ -15,13 +15,14 @@ LIBS_PRIVATE += \
 
 CONFIG += link_pkgconfig
 
-PKGCONFIG_PRIVATE += \
-    gstreamer-0.10 \
-    gstreamer-base-0.10 \
-    gstreamer-interfaces-0.10 \
-    gstreamer-audio-0.10 \
-    gstreamer-video-0.10 \
-    gstreamer-pbutils-0.10
+PKGCONFIG += \
+    gstreamer-$$GST_VERSION \
+    gstreamer-base-$$GST_VERSION \
+    gstreamer-audio-$$GST_VERSION \
+    gstreamer-video-$$GST_VERSION \
+    gstreamer-pbutils-$$GST_VERSION
+
+equals(GST_VERSION,"0.10"): PKGCONFIG_PRIVATE += gstreamer-interfaces-$$GST_VERSION
 
 maemo*: PKGCONFIG_PRIVATE +=gstreamer-plugins-bad-0.10
 
@@ -33,8 +34,10 @@ config_resourcepolicy {
 # Header files must go inside source directory of a module
 # to be installed by syncqt.
 INCLUDEPATH += ../multimedia/gsttools_headers/
+INCLUDEPATH += ../plugins/gstreamer/mediaplayer/
 VPATH += ../multimedia/gsttools_headers/
 
+# FIXME: Move qgstreamermirtexturerenderer_p.h and .c to section like maemo6
 PRIVATE_HEADERS += \
     qgstbufferpoolinterface_p.h \
     qgstreamerbushelper_p.h \
@@ -90,14 +93,24 @@ maemo6 {
     }
 }
 
+mir: {
+    contains(QT_CONFIG, opengles2):qtHaveModule(widgets) {
+        PRIVATE_HEADERS += qgstreamermirtexturerenderer_p.h
+        SOURCES += qgstreamermirtexturerenderer.cpp
+        QT += opengl quick
+        LIBS += -lEGL
+    }
+    DEFINES += HAVE_MIR
+}
+
 config_gstreamer_appsrc {
-    PKGCONFIG_PRIVATE += gstreamer-app-0.10
+    PKGCONFIG_PRIVATE += gstreamer-app-$$GST_VERSION
     PRIVATE_HEADERS += qgstappsrc_p.h
     SOURCES += qgstappsrc.cpp
 
     DEFINES += HAVE_GST_APPSRC
 
-    LIBS_PRIVATE += -lgstapp-0.10
+    LIBS_PRIVATE += -lgstapp-$$GST_VERSION
 }
 
 HEADERS += $$PRIVATE_HEADERS

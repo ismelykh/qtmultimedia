@@ -89,8 +89,13 @@ static void addTagToMap(const GstTagList *list,
             break;
         default:
             // GST_TYPE_DATE is a function, not a constant, so pull it out of the switch
+#if GST_CHECK_VERSION(1,0,0)
+            if (G_VALUE_TYPE(&val) == G_TYPE_DATE) {
+                const GDate *date = (const GDate *)g_value_get_boxed(&val);
+#else
             if (G_VALUE_TYPE(&val) == GST_TYPE_DATE) {
                 const GDate *date = gst_value_get_date(&val);
+#endif
                 if (g_date_valid(date)) {
                     int year = g_date_get_year(date);
                     int month = g_date_get_month(date);
@@ -254,6 +259,24 @@ QAudioFormat QGstUtils::audioFormatForCaps(const GstCaps *caps)
 }
 
 
+
+#if GST_CHECK_VERSION(1,0,0)
+/*!
+  Returns audio format for a buffer.
+  If the buffer doesn't have a valid audio format, an empty QAudioFormat is returned.
+*/
+
+QAudioFormat QGstUtils::audioFormatForSample(GstSample *sample)
+{
+    GstCaps* caps = gst_sample_get_caps(sample);
+    if (!caps)
+        return QAudioFormat();
+
+    QAudioFormat format = QGstUtils::audioFormatForCaps(caps);
+    gst_caps_unref(caps);
+    return format;
+}
+#else
 /*!
   Returns audio format for a buffer.
   If the buffer doesn't have a valid audio format, an empty QAudioFormat is returned.
@@ -269,7 +292,7 @@ QAudioFormat QGstUtils::audioFormatForBuffer(GstBuffer *buffer)
     gst_caps_unref(caps);
     return format;
 }
-
+#endif
 
 /*!
   Builds GstCaps for an audio format.
