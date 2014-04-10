@@ -45,11 +45,12 @@
 #include <QtCore/qdebug.h>
 
 #include <gst/gst.h>
-#include <gst/video/videooverlay.h>
 
 #if !GST_CHECK_VERSION(1,0,0)
 #include <gst/interfaces/xoverlay.h>
 #include <gst/interfaces/propertyprobe.h>
+#else
+#include <gst/video/videooverlay.h>
 #endif
 
 

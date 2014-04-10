@@ -464,7 +464,11 @@ static gboolean gst_video_connector_new_buffer_probe(GstObject *pad, GstBuffer *
     if (element->relinked)
         GST_LOG_OBJECT(element, "rejected buffer because of new segment request");
 
+#if GST_CHECK_VERSION(1,0,0)
     return element->relinked ? GST_PAD_PROBE_DROP : GST_PAD_PROBE_OK;
+#else
+    return !element->relinked;
+#endif
 }
 
 static GstFlowReturn
@@ -620,8 +624,6 @@ static gboolean gst_video_connector_handle_sink_event (GstPad * pad, GstObject* 
 static gboolean gst_video_connector_handle_sink_event (GstPad * pad,
                                                        GstEvent * event)
 {
-    (void)parent;
-
     if (GST_EVENT_TYPE (event) == GST_EVENT_NEWSEGMENT) {
         GstVideoConnector *element = GST_VIDEO_CONNECTOR (gst_pad_get_parent (pad));
 

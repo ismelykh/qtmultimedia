@@ -59,7 +59,7 @@ void QGstreamerAudioProbeControl::bufferProbed(GstBuffer* buffer, GstCaps* caps)
 #else
 void QGstreamerAudioProbeControl::bufferProbed(GstBuffer* buffer)
 {
-    gst_buffer_get_caps(buffer);
+    GstCaps* caps = gst_buffer_get_caps(buffer);
 #endif
     if (!caps)
         return;

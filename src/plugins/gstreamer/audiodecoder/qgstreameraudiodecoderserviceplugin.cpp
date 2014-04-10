@@ -96,12 +96,16 @@ void QGstreamerAudioDecoderServicePlugin::updateSupportedMimeTypes() const
 #if GST_CHECK_VERSION(1,0,0)
         if (GST_OBJECT_FLAG_IS_SET(plugin, GST_PLUGIN_FLAG_BLACKLISTED))
             continue;
+
+        GstRegistry *registry = gst_registry_get();
 #else
         if (plugin->flags & (1<<1)) //GST_PLUGIN_FLAG_BLACKLISTED
             continue;
+
+        GstRegistry *registry = gst_registry_get_default();
 #endif
-        orig_features = features = gst_registry_get_feature_list_by_plugin(gst_registry_get (),
-                                                                         gst_plugin_get_name(plugin));
+        orig_features = features = gst_registry_get_feature_list_by_plugin(registry,
+                                                                           gst_plugin_get_name(plugin));
         while (features) {
             if (!G_UNLIKELY(features->data == NULL)) {
                 GstPluginFeature *feature = GST_PLUGIN_FEATURE(features->data);

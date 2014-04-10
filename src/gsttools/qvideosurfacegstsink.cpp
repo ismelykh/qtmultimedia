@@ -988,6 +988,8 @@ gboolean QVideoSurfaceGstSink::event(GstBaseSink *base, GstEvent *event)
     }
 #if GST_CHECK_VERSION(1, 0, 0)
     return GST_BASE_SINK_CLASS (sink_parent_class)->event (base, event);
+#else
+    return TRUE;
 #endif
 }
 
