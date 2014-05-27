@@ -44,7 +44,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QDebug>
 
-#include <private/qcore_unix_p.h>
+#include "qcore_unix_p.h"
 #include <linux/videodev2.h>
 
 QGstreamerVideoInputDeviceControl::QGstreamerVideoInputDeviceControl(QObject *parent)
