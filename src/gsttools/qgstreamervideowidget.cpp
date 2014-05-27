@@ -126,7 +126,7 @@ void QGstreamerVideoWidgetControl::createVideoWidget()
     m_widget->installEventFilter(this);
     m_windowId = m_widget->winId();
 
-    m_videoSink = gst_element_factory_make ("xvimagesink", NULL);
+    m_videoSink = gst_element_factory_make ("imxeglvivsink", NULL);
     if (m_videoSink) {
         // Check if the xv sink is usable
         if (gst_element_set_state(m_videoSink, GST_STATE_READY) != GST_STATE_CHANGE_SUCCESS) {

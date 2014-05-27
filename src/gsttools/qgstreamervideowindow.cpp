@@ -65,7 +65,7 @@ QGstreamerVideoWindow::QGstreamerVideoWindow(QObject *parent, const char *elemen
     if (elementName) {
         m_videoSink = gst_element_factory_make(elementName, NULL);
     } else {
-        m_videoSink = gst_element_factory_make("xvimagesink", NULL);
+        m_videoSink = gst_element_factory_make("imxeglvivsink", NULL);
     }
 
     if (m_videoSink) {
